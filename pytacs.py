@@ -1,12 +1,12 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import getopt
 import logging, logging.handlers
-import SocketServer
+import socketserver
 import threading
 import os
 import sys
-import pytacs.Errors
+import pytacs.exceptions
 
 config = {
 	'fork':			True,
@@ -24,20 +24,22 @@ optlong = ['help', 'forground', 'stderr', 'syslog', 'debug', 'quiet', 'pidfile='
 
 def help():
 	"Display commandline syntax and help"
-	print """PyTACS Command Line Options
+	print(
+	"""PyTACS Command Line Options
 
-  -h  -?  --help            Display this help
-  -f  --foreground          Keep the server in the forground (Implies -e)
-  -e  --stderr              Send log messages to stderr (Instead of syslog)
-  -s  --syslog              Send log messages to syslog (Even if -f)
-  -d  --debug               Enable debugging messages
-  -q  --quiet               Only log errors
-  -p  --pidfile <file>      Where to save the server's process id
-  -k  --kill                Kill the currently running server
-"""
+  	-h  -?  --help            Display this help
+  	-f  --foreground          Keep the server in the forground (Implies -e)
+  	-e  --stderr              Send log messages to stderr (Instead of syslog)
+  	-s  --syslog              Send log messages to syslog (Even if -f)
+  	-d  --debug               Enable debugging messages
+  	-q  --quiet               Only log errors
+  	-p  --pidfile <file>      Where to save the server's process id
+  	-k  --kill                Kill the currently running server
+	"""
+	)
 	sys.exit(-1)
 
-def readConfig(file):
+def read_config(file):
 	"Read in settings from <file>"
 	global config
 	blocks = {'options': {}, 'modules': {}}
@@ -95,17 +97,17 @@ if __name__ == '__main__':
 	globals()['usersources'] = {}
 
 	# Read config file(s)
-	readConfig(config['configfile'])
+	read_config(config['configfile'])
 	for dirpath, dirs, files in os.walk(config['configdir']):
 		dirs[:] = []
 		for file in files:
-			readConfig(os.path.join(dirpath, file))
+			read_config(os.path.join(dirpath, file))
 
 	# Read options
 	try:
 		opts, nonopts = getopt.getopt(sys.argv[1:], optshort, optlong)
 	except getopt.GetoptError:
-		print sys.exc_info()[1]
+		print(sys.exc_info()[1])
 		help()
 		sys.exit(-1)
 	for opt, value in opts:
