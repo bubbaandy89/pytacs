@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0", "python-ldap>=3.0.0", "six"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pytacs_plus"
+version = "0.0.1"
+description = "A small example package"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GPLv1.2 License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/bubbaandy89/pytacs"
+"Bug Tracker" = "https://github.com/bubbaandy89/pytacs/issues"

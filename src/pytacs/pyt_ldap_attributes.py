@@ -10,12 +10,11 @@ Must have the following options defined
 
 from typing import List
 
-import pyt_ldap
-
 import pytacs.exceptions as exceptions
+from pytacs import pyt_ldap
 
 
-class pyt_ldap_attributes(pyt_ldap.pyt_ldap):
+class pyt_ldap_attributes(pyt_ldap.LdapSource):
     """A user source based on an LDAP directory,
     adding the requirement for certain attibutes to be present
     and/or have certain values"""
@@ -24,7 +23,7 @@ class pyt_ldap_attributes(pyt_ldap.pyt_ldap):
 
     def __init__(self, name, modconfig):
         "Prepare LDAP settings"
-        pyt_ldap.pyt_ldap.__init__(self, name, modconfig)
+        pyt_ldap.LdapSource.__init__(self, name, modconfig)
         keys: List[str] = [item.lower() for item in self.modconfig["attrs"].split(",")]
         values: List[str] = [
             item.lower() for item in self.modconfig["values"].split(",")

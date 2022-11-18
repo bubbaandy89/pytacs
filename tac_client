@@ -13,8 +13,8 @@ sock: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.connect((server, port))
 sock.settimeout(2)
 
-authn_packet: packet.Authentication = packet.Authentication(secret)
-authn_packet._body = "Wibble=wibble"
+authn_packet = packet.Accounting(secret)
+authn_packet._body = "Wibble=wibble".encode()
 authn_packet._seq_no = 1
 authn_packet._session_id = random.randint(1, 65535)
 sock.send(authn_packet.encode())

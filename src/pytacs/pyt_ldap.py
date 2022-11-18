@@ -1,4 +1,3 @@
-#!/usr/bin/python
 """
 PyTACS LDAP User Source
 
@@ -24,7 +23,7 @@ class LdapSource(UserSource):
         "Prepare LDAP settings"
         UserSource.__init__(self, name, modconfig)
 
-    def getUser(self, user, password) -> Optional(Dict[str, List[str]]):
+    def getUser(self, user, password) -> Optional[Dict[str, List[str]]]:
         " "
         conn = ldap.open(self.modconfig["host"], int(self.modconfig["port"]))
         try:

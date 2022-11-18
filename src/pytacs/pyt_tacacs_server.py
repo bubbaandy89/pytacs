@@ -51,8 +51,8 @@ class TACACSPlusHandler(socketserver.StreamRequestHandler):
         self.request.shutdown(2)
         self.request.close()
 
-    def process_authn(self, packet):
-        "Process an Authorization packet"
+    def process_authn(self, packet: packet.Authentication):
+        "Process an Authentication packet"
         reply = packet.reply()
         return reply
 

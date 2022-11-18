@@ -1,11 +1,13 @@
-#!/usr/bin/python
-
+import logging
 import operator
 import struct
 from hashlib import md5
 from typing import Literal, Optional
 
 import pytacs.exceptions as exceptions
+
+# import six
+
 
 TAC_PLUS_MAJOR_VER: Literal[12] = 0x0C
 
@@ -55,10 +57,10 @@ TAC_PLUS_AUTHEN_STATUS_FAIL: Literal[2] = 0x02
 TAC_PLUS_AUTHEN_STATUS_GETDATA: Literal[3] = 0x03
 
 
-class Packet(object):
+class Packet:
     """The TACACS+ packet header
 
-     1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8
+    1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8
 
     +----------------+----------------+----------------+----------------+
     |major  | minor  |                |                |                |
@@ -82,7 +84,7 @@ class Packet(object):
     _session_id: int = 0
     _length: int = 0
     _body: str = ""
-    _packstr: str = "!BBBBII"
+    _packstr: bytes = b"!BBBBII"
 
     def __init__(self, session=None, secret=None):
         "Constructor"
@@ -91,14 +93,51 @@ class Packet(object):
 
     def __pseudo_pad(self):
         "Generate the pseudo random pad for encryption/decryption"
-        key = self._packet[4:8] + self._secret + self._packet[:1] + self._packet[2:3]
-        hash: str = ""
+        logging.info(f"_packet = {self._packet}")
+        # decoded_packet = self._packet.decode()
+        # logging.info(f"decoded_packet = {decoded_packet}")
+        logging.info(f"secret = {self._secret}")
+        key: bytes = (
+            self._packet[4:8]
+            + self._secret.encode()
+            + self._packet[:1]
+            + self._packet[2:3]
+        )
         while 1:
-            hash = md5.new(key + hash).digest()
+            hash: bytes = md5(key).digest()
             for char in hash:
                 yield char
 
-    def __crypt(self, data):
+    def __crypt(self, data: bytes) -> bytes:
+        if self._flags & TAC_PLUS_UNENCRYPTED_FLAG or self._secret is None:
+            return data
+        data_length = len(data)
+        unhashed = (
+            self._packet[4:8]
+            + self._secret.encode()
+            + self._packet[:1]
+            + self._packet[2:3]
+        )
+        pad = hashed = md5(unhashed).digest()
+
+        if len(pad) < data_length:
+            # remake hash, appending it to pad until pad >= header.length
+            while True:
+                hashed = md5(unhashed + hashed).digest()
+                pad += hashed
+                if len(pad) >= data_length:
+                    break
+
+        pad = pad[0:(data_length)]
+        pad = list(struct.unpack("B" * len(pad), pad))
+
+        packet_body = []
+        for x in struct.unpack("B" * data_length, data):
+            packet_body.append(x ^ pad.pop(0))
+
+        return struct.pack("B" * len(packet_body), *packet_body)
+
+    def __crypt_old(self, data: str) -> bytes:
         "Apply TACACS+ reversible encryption to the packet body"
         if self._flags & TAC_PLUS_UNENCRYPTED_FLAG or self._secret is None:
             return data
@@ -107,7 +146,7 @@ class Packet(object):
                 chr(operator.xor(ord(c[0]), ord(c[1])))
                 for c in zip(data, self.__pseudo_pad())
             ]
-        )
+        ).encode()
 
     def __repr__(self):
         "Return a short version of the packet type"
@@ -133,7 +172,9 @@ class Packet(object):
 
     def decode(packet_data, secret):
         "Decode a packet off the wire and return an object"
-        tactype = ord(packet_data[1])
+        for packet_item in packet_data:
+            logging.info(f"Packet data {packet_item}")
+        tactype: int = packet_data[1]
         if tactype == TAC_PLUS_AUTHEN:
             obj = Authentication()
         elif tactype == TAC_PLUS_AUTHOR:
@@ -164,7 +205,7 @@ class Packet(object):
         self._minor = ver & 0xF
         self._body = self.__crypt(self._packet[12:])
 
-    def encode(self):
+    def encode(self) -> bytes:
         """Encode a packet ready for the wire. This also encrypts the body,
         this should therefore be called LAST in subclasses.
         Returns the completed packet."""
@@ -187,7 +228,9 @@ class Packet(object):
         This is done by encoding the existing packet, tuncating to 8
         bytes, appending a length of zero (four zero bytes) then
         decoding it."""
-        newpacket = Packet.decode(self.encode()[:8] + "\0\0\0\0", self._secret)
+        newpacket = Packet.decode(
+            self.encode()[:8] + "\0\0\0\0".encode(), self._secret.encode()
+        )
         newpacket._seq_no += 1
         return newpacket
 
@@ -230,47 +273,47 @@ class Authentication(Packet):
 
           1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8
 
-         +----------------+----------------+----------------+----------------+
-         |    action      |    priv_lvl    |  authen_type   |     service    |
-         +----------------+----------------+----------------+----------------+
-         |    user len    |    port len    |  rem_addr len  |    data len    |
-         +----------------+----------------+----------------+----------------+
-         |    user ...
-         +----------------+----------------+----------------+----------------+
-         |    port ...
-         +----------------+----------------+----------------+----------------+
-         |    rem_addr ...
-         +----------------+----------------+----------------+----------------+
-         |    data...
-         +----------------+----------------+----------------+----------------+
+       +----------------+----------------+----------------+----------------+
+       |    action      |    priv_lvl    |  authen_type   |     service    |
+       +----------------+----------------+----------------+----------------+
+       |    user len    |    port len    |  rem_addr len  |    data len    |
+       +----------------+----------------+----------------+----------------+
+       |    user ...
+       +----------------+----------------+----------------+----------------+
+       |    port ...
+       +----------------+----------------+----------------+----------------+
+       |    rem_addr ...
+       +----------------+----------------+----------------+----------------+
+       |    data...
+       +----------------+----------------+----------------+----------------+
 
     The authentication REPLY packet body
 
           1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8
 
-         +----------------+----------------+----------------+----------------+
-         |     status     |      flags     |        server_msg len           |
-         +----------------+----------------+----------------+----------------+
-         |           data len              |        server_msg ...
-         +----------------+----------------+----------------+----------------+
-         |           data ...
-         +----------------+----------------+
+       +----------------+----------------+----------------+----------------+
+       |     status     |      flags     |        server_msg len           |
+       +----------------+----------------+----------------+----------------+
+       |           data len              |        server_msg ...
+       +----------------+----------------+----------------+----------------+
+       |           data ...
+       +----------------+----------------+
 
     The authentication CONTINUE packet body
 
           1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8
 
-         +----------------+----------------+----------------+----------------+
-         |          user_msg len           |            data len             |
-         +----------------+----------------+----------------+----------------+
-         |     flags      |  user_msg ...
-         +----------------+----------------+----------------+----------------+
-         |    data ...
-         +----------------+"""
+       +----------------+----------------+----------------+----------------+
+       |          user_msg len           |            data len             |
+       +----------------+----------------+----------------+----------------+
+       |     flags      |  user_msg ...
+       +----------------+----------------+----------------+----------------+
+       |    data ...
+       +----------------+"""
 
-    _startstr: str = "!BBBBBBBB"
-    _replystr: str = "!BBHH"
-    _continuestr: str = "!HH"
+    _startstr: str = b"!BBBBBBBB"
+    _replystr: str = b"!BBHH"
+    _continuestr: str = b"!HH"
 
     def __init__(self, secret=None):
         "Initialise this authentication packet"
@@ -289,63 +332,61 @@ class Authentication(Packet):
         else:
             self._subtype = TAC_PLUS_AUTHEN_CONTINUE
 
-    def encode(self):
+    def encode(self) -> bytes:
         "Encode a packet ready for the wire. Returns the completed packet."
         if self._subtype == TAC_PLUS_AUTHEN_START:
             self._body = (
                 struct.pack(
-                    self.getField("action", 0),
-                    self.getField("priv_lvl", 0),
-                    self.getField("authen_type", 0),
-                    self.getField("service", 0),
-                    len(self.getField("user", "")),
-                    len(self.getField("port", "")),
-                    len(self.getField("rem_addr", "")),
-                    len(self.getField("data", "")),
+                    self._startstr,
+                    self.get_field("action", 0),
+                    self.get_field("priv_lvl", 0),
+                    self.get_field("authen_type", 0),
+                    self.get_field("service", 0),
+                    len(self.get_field("user", "")),
+                    len(self.get_field("port", "")),
+                    len(self.get_field("rem_addr", "")),
+                    len(self.get_field("data", "")),
                 )
-                + self.getField("user", "")
-                + self.getField("port", "")
-                + self.getField("rem_addr", "")
-                + self.getField("data", "")
+                + self.get_field("user", "").encode()
+                + self.get_field("port", "").encode()
+                + self.get_field("rem_addr", "").encode()
+                + self.get_field("data", "").encode()
             )
         elif self._subtype == TAC_PLUS_AUTHEN_REPLY:
             self._body = (
                 struct.pack(
                     self._replystr,
-                    self.getField("status", 0),
-                    self.getField("flags", 0),
-                    len(self.getField("server_msg", "")),
-                    len(self.getField("data", "")),
+                    self.get_field("status", 0),
+                    self.get_field("flags", 0),
+                    len(self.get_field("server_msg", "")),
+                    len(self.get_field("data", "")),
                 )
-                + self.getField("server_msg", "")
-                + self.getField("data", "")
+                + self.get_field("server_msg", "").encode()
+                + self.get_field("data", "").encode()
             )
         elif self._subtype == TAC_PLUS_AUTHEN_CONTINUE:
             self._body = (
                 struct.pack(
                     self._continuestr,
-                    len(self.getField("user_msg", "")),
-                    len(self.getField("data", "")),
+                    len(self.get_field("user_msg", "")),
+                    len(self.get_field("data", "")),
                 )
-                + self.getField("user_msg", "")
-                + self.getField("data", "")
+                + self.get_field("user_msg", "").encode()
+                + self.get_field("data", "").encode()
             )
         else:
             raise exceptions.PyTACSError("Invalid packet sub-type")
         return Packet.encode(self)
 
-    def setField(self, field, value):
+    def set_field(self, field, value):
         "Set a field value"
         self._fields[field] = value
 
-    def getField(self, field, default=None):
+    def get_field(self, field, default=None):
         "Get a field"
         return self._fields.get(field, default)
 
 
-# }}}
-
-# {{{ Classs Authorization
 class Authorization(Packet):
     """
        11.  Authorization
@@ -378,27 +419,27 @@ class Authorization(Packet):
 
              1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8
 
-            +----------------+----------------+----------------+----------------+
-            |  authen_method |    priv_lvl    |  authen_type   | authen_service |
-            +----------------+----------------+----------------+----------------+
-            |    user len    |    port len    |  rem_addr len  |    arg_cnt     |
-            +----------------+----------------+----------------+----------------+
-            |   arg 1 len    |   arg 2 len    |      ...       |   arg N len    |
-            +----------------+----------------+----------------+----------------+
-            |   user ...
-            +----------------+----------------+----------------+----------------+
-            |   port ...
-            +----------------+----------------+----------------+----------------+
-            |   rem_addr ...
-            +----------------+----------------+----------------+----------------+
-            |   arg 1 ...
-            +----------------+----------------+----------------+----------------+
-            |   arg 2 ...
-            +----------------+----------------+----------------+----------------+
-            |   ...
-            +----------------+----------------+----------------+----------------+
-            |   arg N ...
-            +----------------+----------------+----------------+----------------+
+          +----------------+----------------+----------------+----------------+
+          |  authen_method |    priv_lvl    |  authen_type   | authen_service |
+          +----------------+----------------+----------------+----------------+
+          |    user len    |    port len    |  rem_addr len  |    arg_cnt     |
+          +----------------+----------------+----------------+----------------+
+          |   arg 1 len    |   arg 2 len    |      ...       |   arg N len    |
+          +----------------+----------------+----------------+----------------+
+          |   user ...
+          +----------------+----------------+----------------+----------------+
+          |   port ...
+          +----------------+----------------+----------------+----------------+
+          |   rem_addr ...
+          +----------------+----------------+----------------+----------------+
+          |   arg 1 ...
+          +----------------+----------------+----------------+----------------+
+          |   arg 2 ...
+          +----------------+----------------+----------------+----------------+
+          |   ...
+          +----------------+----------------+----------------+----------------+
+          |   arg N ...
+          +----------------+----------------+----------------+----------------+
 
 
     authen_method
@@ -654,23 +695,23 @@ class Authorization(Packet):
 
              1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8
 
-            +----------------+----------------+----------------+----------------+
-            |    status      |     arg_cnt    |         server_msg len          |
-            +----------------+----------------+----------------+----------------+
-            +            data len             |    arg 1 len   |    arg 2 len   |
-            +----------------+----------------+----------------+----------------+
-            |      ...       |   arg N len    |         server_msg ...
-            +----------------+----------------+----------------+----------------+
-            |   data ...
-            +----------------+----------------+----------------+----------------+
-            |   arg 1 ...
-            +----------------+----------------+----------------+----------------+
-            |   arg 2 ...
-            +----------------+----------------+----------------+----------------+
-            |   ...
-            +----------------+----------------+----------------+----------------+
-            |   arg N ...
-            +----------------+----------------+----------------+----------------+
+          +----------------+----------------+----------------+----------------+
+          |    status      |     arg_cnt    |         server_msg len          |
+          +----------------+----------------+----------------+----------------+
+          +            data len             |    arg 1 len   |    arg 2 len   |
+          +----------------+----------------+----------------+----------------+
+          |      ...       |   arg N len    |         server_msg ...
+          +----------------+----------------+----------------+----------------+
+          |   data ...
+          +----------------+----------------+----------------+----------------+
+          |   arg 1 ...
+          +----------------+----------------+----------------+----------------+
+          |   arg 2 ...
+          +----------------+----------------+----------------+----------------+
+          |   ...
+          +----------------+----------------+----------------+----------------+
+          |   arg N ...
+          +----------------+----------------+----------------+----------------+
 
 
 
@@ -734,6 +775,12 @@ class Authorization(Packet):
 
        None of the arg values have any relevance if an ERROR is set."""
 
+    def __init__(self, secret=None):
+        "Initialise this authz packet"
+        Packet.__init__(self, secret)
+        self._type = TAC_PLUS_AUTHOR
+        self._fields = {}
+
 
 # }}}
 
@@ -752,27 +799,27 @@ class Accounting(Packet):
 
              1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8
 
-            +----------------+----------------+----------------+----------------+
-            |      flags     |  authen_method |    priv_lvl    |  authen_type   |
-            +----------------+----------------+----------------+----------------+
-            | authen_service |    user len    |    port len    |  rem_addr len  |
-            +----------------+----------------+----------------+----------------+
-            |    arg_cnt     |   arg 1 len    |   arg 2 len    |      ...       |
-            +----------------+----------------+----------------+----------------+
-            |   arg N len    |    user ...
-            +----------------+----------------+----------------+----------------+
-            |   port ...
-            +----------------+----------------+----------------+----------------+
-            |   rem_addr ...
-            +----------------+----------------+----------------+----------------+
-            |   arg 1 ...
-            +----------------+----------------+----------------+----------------+
-            |   arg 2 ...
-            +----------------+----------------+----------------+----------------+
-            |   ...
-            +----------------+----------------+----------------+----------------+
-            |   arg N ...
-            +----------------+----------------+----------------+----------------+
+          +----------------+----------------+----------------+----------------+
+          |      flags     |  authen_method |    priv_lvl    |  authen_type   |
+          +----------------+----------------+----------------+----------------+
+          | authen_service |    user len    |    port len    |  rem_addr len  |
+          +----------------+----------------+----------------+----------------+
+          |    arg_cnt     |   arg 1 len    |   arg 2 len    |      ...       |
+          +----------------+----------------+----------------+----------------+
+          |   arg N len    |    user ...
+          +----------------+----------------+----------------+----------------+
+          |   port ...
+          +----------------+----------------+----------------+----------------+
+          |   rem_addr ...
+          +----------------+----------------+----------------+----------------+
+          |   arg 1 ...
+          +----------------+----------------+----------------+----------------+
+          |   arg 2 ...
+          +----------------+----------------+----------------+----------------+
+          |   ...
+          +----------------+----------------+----------------+----------------+
+          |   arg N ...
+          +----------------+----------------+----------------+----------------+
 
 
     flags
@@ -881,13 +928,13 @@ class Accounting(Packet):
 
              1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8  1 2 3 4 5 6 7 8
 
-            +----------------+----------------+----------------+----------------+
-            |         server_msg len          |            data len             |
-            +----------------+----------------+----------------+----------------+
-            |     status     |         server_msg ...
-            +----------------+----------------+----------------+----------------+
-            |     data ...
-            +----------------+
+          +----------------+----------------+----------------+----------------+
+          |         server_msg len          |            data len             |
+          +----------------+----------------+----------------+----------------+
+          |     status     |         server_msg ...
+          +----------------+----------------+----------------+----------------+
+          |     data ...
+          +----------------+
 
 
 
@@ -933,8 +980,12 @@ class Accounting(Packet):
        task is still running. The STOP flag MUST NOT be set in conjunction
        with the WATCHDOG flag."""
 
+    def __init__(self, secret=None):
+        "Initialise this acct packet"
+        Packet.__init__(self, secret)
+        self._type = TAC_PLUS_ACCT
+        self._fields = {}
 
-# }}}
 
 # {{{ Further details from the RFC
 """
