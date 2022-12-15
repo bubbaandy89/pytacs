@@ -43,7 +43,7 @@ jobs:
         run: |
           set -ex
           sudo apt update
-          sudo apt install -y ldap-utils slapd enchant libldap2-dev libsasl2-dev apparmor-utils
+          sudo apt install -y python3-dev libldap2-dev libsasl2-dev libssl-dev apparmor-utils
 
       - name: Disable AppArmor
         run: sudo aa-disable /usr/sbin/slapd
