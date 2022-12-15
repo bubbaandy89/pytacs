@@ -1,5 +1,7 @@
 # pytacs_plus
 
+[![GitHub Actions Status](https://github.com/bubbaandy89/pytacs/actions/workflows/test-docs.yml/badge.svg)](https://github.com/bubbaandy89/pytacs/actions/workflows/test-docs.yml)
+
 This is a fork of pytacs originally found [here](https://github.com/kjmancuso/pytacs)
 
 
