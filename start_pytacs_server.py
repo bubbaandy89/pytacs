@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 import getopt
 import logging
 import logging.handlers
@@ -9,31 +8,32 @@ from pathlib import Path
 from typing import Any, Dict, List, TypedDict
 
 import typer
+from structlog import get_logger
+from structlog.stdlib import BoundLogger
 
+from pytacs.config import read_config_file
+from pytacs.plugins import load_plugins
 from pytacs.structures.exceptions import ConfigurationError
+from pytacs.structures.models.configuration import Configuration
+from pytacs.util import configure_structlog, get_log_level_from_string
 
 
 class Config(TypedDict):
-    fork: bool
-    syslog: bool
-    loglevel: int
-    pidfile: str
-    configfile: str
-    configdir: str
+    pidfile: Path
+    configfile: Path
+    configdir: Path
     kill: bool
-    modules: Dict[str, Any]
+    fork: bool
 
 
 DEFAULT_CONFIG: Config = {
-    "fork": True,
-    "syslog": True,
-    "loglevel": 10,  # 10 = debug
-    "pidfile": "/var/run/pytacs.pid",
-    "configfile": "./etc/pytacs.conf",
-    "configdir": "./etc/pytacs.d",
+    "pidfile": Path("/var/run/pytacs.pid"),
+    "configfile": Path("./etc/pytacs.json"),
+    "configdir": Path("./etc/pytacs.d"),
     "kill": False,
-    "modules": {},
+    "fork": True,
 }
+
 
 optshort = "?hfesdqP:k"
 optlong: List[str] = [
@@ -50,166 +50,51 @@ optlong: List[str] = [
 app = typer.Typer()
 
 
-def help():
-    "Display commandline syntax and help"
-    print(
-        """PyTACS Command Line Options
-
-      -h  -?  --help            Display this help
-      -f  --foreground          Keep the server in the forground (Implies -e)
-      -e  --stderr              Send log messages to stderr (Instead of syslog)
-      -s  --syslog              Send log messages to syslog (Even if -f)
-      -d  --debug               Enable debugging messages
-      -q  --quiet               Only log errors
-      -p  --pidfile <file>      Where to save the server's process id
-      -k  --kill                Kill the currently running server
-    """
-    )
-    sys.exit(-1)
-
-
-def read_config_file(file: Path) -> None:
-    "Read in settings from <file>"
-    global config
-    blocks = {"options": {}, "modules": {}}
-    block = ""
-    for line in open(file, "r"):
-        line = line.strip()
-        if len(line) == 0:
-            continue
-        if line[0] == ";":
-            continue
-        if line[0] == "[" and line[-1] == "]":
-            block = line[1:-1]
-            if block not in blocks:
-                blocks[block] = {}
-            continue
-        if block == "":
-            raise ConfigurationError(
-                f"Configuration error: setting outside block [{file}] {line}"
-            )
-        items = line.split("=", 1)
-        if len(items) != 2:
-            raise ConfigurationError(
-                f"Configuration error: setting without equals sign [{file}] {line}"
-            )
-        blocks[block][items[0].strip()] = items[1].strip()
-
-    # Process standard 'options' settings
-    for key, value in blocks["options"].items():
-        key = key.lower()
-        if key == "syslog":
-            if value != "0" or value.lower == "on" or value.lower() == "true":
-                config["syslog"] = True
-            else:
-                config["syslog"] = False
-        elif key == "foreground":
-            if value != "0" or value.lower == "on" or value.lower() == "true":
-                config["fork"] = False
-                config["syslog"] = False
-            else:
-                config["fork"] = True
-        else:
-            raise ConfigurationError(
-                f"Configuration error: Invalid option [{file}] {key}={value}"
-            )
-
-    # Store module(s) settings
-    for key, value in blocks["modules"].items():
-        modopts = {}
-        if key in blocks:
-            modopts = blocks[key]
-            del blocks[key]
-        modopts["__module__"] = value
-        config["modules"][key] = modopts
-    del blocks["modules"]
-    for key, value in blocks.items():
-        config[key] = value
-
-
 @app.command()
-def start_server(config_directory: Path, config_file_name: str):
+def start_server(
+    config_file_location: Path = DEFAULT_CONFIG["configfile"],
+    pidfile: Path = DEFAULT_CONFIG["pidfile"],
+    kill: bool = DEFAULT_CONFIG["kill"],
+    fork: bool = DEFAULT_CONFIG["fork"],
+):
+    config: Configuration = read_config_file(config_file_location)
+    log_level: int = get_log_level_from_string(str(config.options.log_level))
+    logging.basicConfig(
+        format="%(message)s",
+        stream=sys.stdout,
+        level=log_level,
+    )
+    configure_structlog()
+    logger: BoundLogger = get_logger("PyTacs")
 
+    logger.info("Starting server")
 
-if __name__ == "__main__":
-    # Set up the framework
-    globals()["servers"] = {}
-    globals()["usersources"] = {}
-
-    # Read config file(s)
-    config_directory = Path(config["configdir"])
-    read_config_file(Path(config["configfile"]))
-    for dirpath, dirs, files in config_directory.walk():
-        dirs[:] = []
-        for file in files:
-            read_config_file(Path(dirpath).joinpath(file))
-
-    # Read options
-    try:
-        opts, nonopts = getopt.getopt(sys.argv[1:], optshort, optlong)
-    except getopt.GetoptError:
-        print(sys.exc_info()[1])
-        help()
-        sys.exit(-1)
-    for opt, value in opts:
-        if opt == "-h" or opt == "-?" or opt == "--help":
-            help()
-        if opt == "-f" or opt == "--foreground":
-            config["fork"] = False
-            config["syslog"] = False
-        if opt == "-e" or opt == "--stderr":
-            config["syslog"] = False
-        if opt == "-s" or opt == "--syslog":
-            config["syslog"] = True
-        if opt == "-d" or opt == "--debug":
-            config["loglevel"] = 10
-        if opt == "-q" or opt == "--quiet":
-            config["loglevel"] = 40
-        if opt == "-p" or opt == "--pidfile":
-            config["pidfile"] = value
-        if opt == "-k" or opt == "--kill":
-            config["kill"] = True
-
-    # Open logs
-    rootlog = logging.getLogger("")
-    rootlog.setLevel(config["loglevel"])
-    if config["syslog"]:
-        syslog = logging.handlers.SysLogHandler(
-            address="/dev/log",
-            facility=logging.handlers.SysLogHandler.LOG_DAEMON,
-        )
-        syslog.setLevel(config["loglevel"])
-        syslog.log_format_string = "<%%d>PyTACS[%d]: %%s\000" % (os.getpid(),)
-        rootlog.addHandler(syslog)
-
-    # Check if a pidfile exists
-    if os.path.exists(config["pidfile"]):
-        # Is that process still running?
-        pid = int(open(config["pidfile"]).read())
-        if config["kill"]:
+    if pidfile.exists():
+        pid = int(pidfile.read_text())
+        if kill:
+            # Force Kill
             try:
                 os.kill(pid, 1)
-                logging.info("Running copy (pid %d) killed" % (pid,), exc_info=0)
-                sys.stderr.write("Server stopped\n")
+                logger.info(f"Running copy (pid {pid}) killed")
                 sys.exit(0)
-            except Exception as e:
-                raise e
-        try:
-            os.kill(pid, 0)
-            logging.error("Server already running as pid %d" % (pid,), exc_info=0)
-            sys.stderr.write("Server already running\n")
-            sys.exit(1)
-        except Exception:
-            pass
-    if config["kill"]:
-        logging.error("No running server to kill")
-        sys.stderr.write("No running server to kill\n")
-    # Fork
-    if config["fork"]:
+            except Exception:
+                logger.exception(f"Failed to stop PID {pid}")
+
+        # Graceful kill
+        os.kill(pid, 0)
+        logger.error(f"Server already running as pid {pid}")
+        sys.exit(1)
+
+    if kill:
+        # If kill is passed but PIDFile doesnt exist
+        logger.error("No running server to kill")
+
+    if fork:
+        # Fork things out
         pid = os.fork()
         if pid:
             # Record the pid in the pid-file and then exit
-            open(config["pidfile"], "w").write("%d" % pid)
+            open(pidfile, "w").write(f"{pid}")
             sys.exit(0)
         # Close tty(s)
         si = open("/dev/null", "a+")
@@ -218,18 +103,11 @@ if __name__ == "__main__":
         os.dup2(si.fileno(), 2)
         si.close()
 
-    # Load modules from config file(s)
-    for key, value in config["modules"].items():
-        modname = value["__module__"]
-        mod = __import__("pytacs.%s" % (modname,), globals(), locals())
-        mod = getattr(mod, modname)  # Get the sub module
-        cls = getattr(mod, modname)  # Get the class
-        obj = cls(key, value)
-        config["modules"][key]["__instance__"] = obj
-        obj.__reg_module__(globals(), key)
+    # Load plugins from config file(s)
+    loaded_plugins: Dict[str, Any] = load_plugins(config.modules, logger)
 
-    # Log either started or exited
-    if len(globals()["servers"]) == 0:
-        logging.debug("No servers configured - Exiting")
-    else:
-        logging.debug("%s servers configured - Running" % (len(globals()["servers"])))
+    logger.info(f"Loaded Plugins: {loaded_plugins}")
+
+
+if __name__ == "__main__":
+    app()
