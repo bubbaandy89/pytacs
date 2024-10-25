@@ -1,7 +1,8 @@
 {
     "options": {
         "foreground": true,
-        "syslog": true
+        "syslog": true,
+        "log_level": "debug"
     },
     "modules": [
         "pyt_tacacs_server",
