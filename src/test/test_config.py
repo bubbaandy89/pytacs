@@ -7,7 +7,7 @@ from pytacs.config import read_config_file
 from pytacs.structures.models.configuration import Configuration
 
 TEST_GOOD_CONFIG_FILE_CONTENTS_DICT = {
-    "options": {"foreground": True, "syslog": True, "log_level": "debug"},
+    "options": {"foreground": True, "syslog": True, "log_level": "DEBUG"},
     "modules": ["pyt_tacacs_server", "pyt_ldap_attributes"],
     "servers": [
         {
