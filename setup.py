@@ -27,5 +27,8 @@ setup(
     ],
     packages=find_packages(where="src"),
     package_dir={"": "src"},
+    package_data={
+        "pytacs": ["py.typed"],
+    },
     install_requires=["python-ldap>=3.0.0", "six"],
 )
