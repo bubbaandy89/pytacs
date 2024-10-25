@@ -14,3 +14,5 @@ pytest-cov
 flake8
 black
 mypy
+# Logging
+structlog
