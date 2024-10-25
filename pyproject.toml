@@ -17,3 +17,14 @@ classifiers = [
 [project.urls]
 "Homepage" = "https://github.com/bubbaandy89/pytacs"
 "Bug Tracker" = "https://github.com/bubbaandy89/pytacs/issues"
+
+[tool.pytest.ini_options]
+addopts = [
+    "--verbose",
+    "--import-mode=importlib",
+    "--cov-config=setup.cfg",
+    "--cov-report=term-missing",
+    "--cov-report=html:documentation/coverage",
+    "--cov-report=xml:documentation/coverage/coverage.xml",
+]
+pythonpath = "src"

@@ -1,10 +1,9 @@
 import logging
-import operator
 import struct
 from hashlib import md5
-from typing import Literal, Optional
+from typing import Any, Generator, Literal, Union
 
-import pytacs.exceptions as exceptions
+import pytacs.structures.exceptions as exceptions
 
 # import six
 
@@ -74,8 +73,8 @@ class Packet:
     +----------------+----------------+----------------+----------------+
     """
 
-    _secret: Optional[str] = None  # The secret for this connection
-    _packet: str = ""
+    _secret: str = ""  # The secret for this connection
+    _packet: bytes = b""
     _major: int = TAC_PLUS_MAJOR_VER
     _minor: int = TAC_PLUS_MINOR_VER_DEFAULT
     _type: int = 0
@@ -86,12 +85,12 @@ class Packet:
     _body: str = ""
     _packstr: bytes = b"!BBBBII"
 
-    def __init__(self, session=None, secret=None):
+    def __init__(self, session: int, secret: str) -> None:
         "Constructor"
         self._session_id = session
         self._secret = secret
 
-    def __pseudo_pad(self):
+    def __pseudo_pad(self) -> Generator[int, Any, None]:
         "Generate the pseudo random pad for encryption/decryption"
         logging.info(f"_packet = {self._packet}")
         # decoded_packet = self._packet.decode()
@@ -111,8 +110,8 @@ class Packet:
     def __crypt(self, data: bytes) -> bytes:
         if self._flags & TAC_PLUS_UNENCRYPTED_FLAG or self._secret is None:
             return data
-        data_length = len(data)
-        unhashed = (
+        data_length: int = len(data)
+        unhashed: bytes = (
             self._packet[4:8]
             + self._secret.encode()
             + self._packet[:1]
@@ -137,18 +136,7 @@ class Packet:
 
         return struct.pack("B" * len(packet_body), *packet_body)
 
-    def __crypt_old(self, data: str) -> bytes:
-        "Apply TACACS+ reversible encryption to the packet body"
-        if self._flags & TAC_PLUS_UNENCRYPTED_FLAG or self._secret is None:
-            return data
-        return "".join(
-            [
-                chr(operator.xor(ord(c[0]), ord(c[1])))
-                for c in zip(data, self.__pseudo_pad())
-            ]
-        ).encode()
-
-    def __repr__(self):
+    def __repr__(self) -> str:
         "Return a short version of the packet type"
         return "<Packet: %s, Ver: %s/%s>" % (
             self.__class__.__name__.split(".")[-1],
@@ -156,9 +144,9 @@ class Packet:
             self._minor,
         )
 
-    def __str__(self):
+    def __str__(self) -> str:
         "Turn the packet into a usable string"
-        retval = "Packet:\t%s\n" % (self.__class__.__name__.split(".")[-1],)
+        retval: str = "Packet:\t%s\n" % (self.__class__.__name__.split(".")[-1],)
         retval += "Ver:\t%s/%s\n" % (self._major, self._minor)
         retval += "Type:\t%s\n" % (self._type,)
         retval += "Seq:\t%s\n" % (self._seq_no,)
@@ -170,7 +158,7 @@ class Packet:
         retval += "---------- BODY END\n"
         return retval
 
-    def decode(packet_data, secret):
+    def decode(packet_data, secret) -> Union[Authentication, Authorization, Accounting]:
         "Decode a packet off the wire and return an object"
         for packet_item in packet_data:
             logging.info(f"Packet data {packet_item}")
@@ -264,6 +252,7 @@ class Packet:
 
 
 # }}}
+
 
 # {{{ class Authentication
 class Authentication(Packet):
@@ -783,6 +772,7 @@ class Authorization(Packet):
 
 
 # }}}
+
 
 # {{{ class Accounting
 class Accounting(Packet):

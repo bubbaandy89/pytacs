@@ -10,7 +10,7 @@ Must have the following options defined
 
 from typing import List
 
-import pytacs.exceptions as exceptions
+import pytacs.structures.exceptions as exceptions
 from pytacs import pyt_ldap
 
 

@@ -4,7 +4,7 @@ PyTACS Base Module Class
 """
 from typing import List, Optional
 
-import pytacs.exceptions as exceptions
+import pytacs.structures.exceptions as exceptions
 
 
 class PyTACSModule(object):

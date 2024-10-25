@@ -19,7 +19,7 @@ setup(
     description=("A Python socketserver based tacacs+ server"),
     keywords="Python TACACS+",
     url="https://github.com/bubbaandy89/pytacs",
-    long_description=read("README"),
+    long_description=read("README.md"),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Topic :: Utilities",

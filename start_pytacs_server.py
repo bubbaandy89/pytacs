@@ -6,13 +6,25 @@ import logging.handlers
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, TypedDict
 
 import typer
 
-from pytacs.exceptions import ConfigurationError
+from pytacs.structures.exceptions import ConfigurationError
 
-config = {
+
+class Config(TypedDict):
+    fork: bool
+    syslog: bool
+    loglevel: int
+    pidfile: str
+    configfile: str
+    configdir: str
+    kill: bool
+    modules: Dict[str, Any]
+
+
+DEFAULT_CONFIG: Config = {
     "fork": True,
     "syslog": True,
     "loglevel": 10,  # 10 = debug
@@ -113,6 +125,10 @@ def read_config_file(file: Path) -> None:
     del blocks["modules"]
     for key, value in blocks.items():
         config[key] = value
+
+
+@app.command()
+def start_server(config_directory: Path, config_file_name: str):
 
 
 if __name__ == "__main__":

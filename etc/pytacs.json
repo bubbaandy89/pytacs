@@ -1,0 +1,40 @@
+{
+    "options": {
+        "foreground": true,
+        "syslog": true
+    },
+    "modules": [
+        "pyt_tacacs_server",
+        "pyt_ldap_attributes"
+    ],
+    "servers": [
+        {
+            "name": "tac1",
+            "listening_address": "127.0.0.1",
+            "listening_port": 49,
+            "clients": [
+                {
+                    "name": "local_test",
+                    "ip_address": "127.0.0.1",
+                    "secret": "secret"
+                }
+            ]
+        }
+    ],
+    "ldap": {
+        "host_name": "",
+        "host_ip": "192.168.100.60",
+        "port": 389,
+        "dn_format": "cn=%s,ou=people,dc=haqa,dc=net",
+        "attributes": [
+            "objectClass",
+            "sn",
+            "mail"
+        ],
+        "values": [
+            "inetOrgPerson",
+            "",
+            ""
+        ]
+    }
+}

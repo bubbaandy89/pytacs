@@ -1,2 +1,16 @@
-python-ldap>=3.0.0
+# LDAP
+ldap3
+types-ldap3
+
 six
+typer
+types-setuptools
+ipython
+pydantic
+# Unit Testing
+pytest
+pytest-cov
+# Formatting/linting
+flake8
+black
+mypy
