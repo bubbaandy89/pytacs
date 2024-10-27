@@ -7,3 +7,8 @@ This is a fork of pytacs originally found [here](https://github.com/kjmancuso/py
 
 
 [Github-flavored Markdown](https://guides.github.com/features/mastering-markdown/)
+
+## Testing
+
+### Unit Test Coverage
+https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/bubbaandy89/6c31b32f0703d797bb43ed2dc75ce0c0/raw/covbadge.json
