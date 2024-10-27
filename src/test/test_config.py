@@ -37,7 +37,13 @@ TEST_GOOD_CONFIG_FILE_CONTENTS_DICT = {
         "host_name": "",
         "host_ip": "192.168.100.60",
         "port": 3306,
+        "database_name": "aaa_db",
         "table_name": "test_table",
+        "database_user_name": "dbuser",
+        "database_user_password": "XXXXXXXXXX",
+        "user_column_name": "username",
+        "password_column_name": "password",
+        "group_membership_column_name": "memberOfGroups",
     },
 }
 

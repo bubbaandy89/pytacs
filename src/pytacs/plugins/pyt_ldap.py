@@ -11,7 +11,6 @@ from functools import cached_property
 from ipaddress import IPv4Address
 from typing import Dict, List, Optional
 
-import ldap3
 from ldap3 import Connection, Server
 from ldap3.core.exceptions import LDAPBindError
 

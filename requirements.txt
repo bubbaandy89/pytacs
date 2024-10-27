@@ -1,6 +1,7 @@
-# LDAP
+# AAA Backends
 ldap3
 types-ldap3
+mysql-connector-python
 
 six
 typer
