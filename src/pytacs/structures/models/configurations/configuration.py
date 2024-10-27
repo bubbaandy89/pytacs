@@ -1,7 +1,8 @@
 from typing import List, Literal
 
 from pytacs.structures.models.base import BaseModel
-from pytacs.structures.models.ldap import LDAPConfiguration
+from pytacs.structures.models.configurations.plugins.ldap import LDAPConfiguration
+from pytacs.structures.models.configurations.plugins.mysql import MySQLConfiguration
 from pytacs.structures.models.server import ServerConfiguration
 from pytacs.structures.modules import SupportedModule
 
@@ -17,3 +18,4 @@ class Configuration(BaseModel):
     modules: List[SupportedModule]
     ldap: LDAPConfiguration
     servers: List[ServerConfiguration]
+    mysql: MySQLConfiguration

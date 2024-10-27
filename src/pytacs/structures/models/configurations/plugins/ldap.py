@@ -1,14 +1,13 @@
-from ipaddress import ip_address
 from typing import List, Optional
 
 from ldap3.core.exceptions import LDAPInvalidDnError
 from ldap3.utils import dn
 from pydantic import IPvAnyAddress, field_validator
 
-from pytacs.structures.models.base import BaseModel
+from pytacs.structures.models.configurations.plugins.base import PluginConfiguration
 
 
-class LDAPConfiguration(BaseModel):
+class LDAPConfiguration(PluginConfiguration):
     host_name: Optional[str] = None
     host_ip: Optional[IPvAnyAddress] = None
     port: int = 389

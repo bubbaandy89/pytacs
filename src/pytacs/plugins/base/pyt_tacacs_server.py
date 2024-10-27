@@ -4,14 +4,16 @@ PyTACS TACACS+ listener and handler
 """
 
 import logging
-import socketserver
 import threading
+from socketserver import StreamRequestHandler, ThreadingTCPServer
+from threading import Thread
 from typing import List, Union
 
-from pytacs import packet, pytacs_lib
+from pytacs import packet
+from pytacs.plugins.base.pytacs_lib import PyTACSModule
 
 
-class TACACSPlusHandler(socketserver.StreamRequestHandler):
+class TACACSPlusHandler(StreamRequestHandler):
     "Simple TACACS+ connection handler. Decode the packet and process"
 
     def handle(self):
@@ -65,17 +67,17 @@ class TACACSPlusHandler(socketserver.StreamRequestHandler):
         pass
 
 
-class TACACSPlusListener(socketserver.ThreadingTCPServer):
+class TACACSPlusListener(ThreadingTCPServer):
     "TCP Listener for PyTACS server"
 
-    allow_reuse_address: bool = 1
+    allow_reuse_address: bool = True
 
     def __init__(self, addr):
         "Initialize the socket, start the thread"
-        socketserver.ThreadingTCPServer.__init__(self, addr, TACACSPlusHandler)
+        ThreadingTCPServer.__init__(self, addr, TACACSPlusHandler)
 
 
-class pyt_tacacs_server(pytacs_lib.PyTACSModule, threading.Thread):
+class PYTacsTACACSServer(PyTACSModule, Thread):
 
     __required__: List[str] = ["address", "port", "clients"]
     __registry__: str = "servers"
@@ -83,7 +85,7 @@ class pyt_tacacs_server(pytacs_lib.PyTACSModule, threading.Thread):
     def __init__(self, name, modconfig):
         "Start the tacacs server and record it in the server list"
         self.running: bool = True
-        pytacs_lib.PyTACSModule.__init__(
+        PyTACSModule.__init__(
             self,
             name,
             modconfig,
@@ -109,6 +111,6 @@ class pyt_tacacs_server(pytacs_lib.PyTACSModule, threading.Thread):
 
     def __reg_module__(self, globals, name):
         "Register this module and grab the secrets"
-        pytacs_lib.PyTACSModule.__reg_module__(self, globals, name)
+        PyTACSModule.__reg_module__(self, globals, name)
         clients = self.modconfig["clients"]
         self.listener.clients = globals["config"][clients]

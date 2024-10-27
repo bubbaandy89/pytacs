@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from pytacs.structures.models.configuration import Configuration
+from pytacs.structures.models.configurations.configuration import Configuration
 
 
 def read_config_file(config_file_path: Path) -> Configuration:

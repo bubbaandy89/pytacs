@@ -10,28 +10,25 @@ Must have the following options defined
 
 from typing import List
 
-import pytacs.structures.exceptions as exceptions
-from pytacs import pyt_ldap
+from pytacs.plugins.pyt_ldap import LdapSource
+from pytacs.structures.exceptions import ConfigurationError
+from pytacs.structures.models.configurations.plugins.ldap import LDAPConfiguration
 
 
-class pyt_ldap_attributes(pyt_ldap.LdapSource):
+class LDAPAttributes(LdapSource):
     """A user source based on an LDAP directory,
     adding the requirement for certain attibutes to be present
     and/or have certain values"""
 
-    __required__: List[str] = ["host", "port", "dnfmt"]
-
-    def __init__(self, name, modconfig):
+    def __init__(self, name: str, modconfig: LDAPConfiguration) -> None:
         "Prepare LDAP settings"
-        pyt_ldap.LdapSource.__init__(self, name, modconfig)
-        keys: List[str] = [item.lower() for item in self.modconfig["attrs"].split(",")]
-        values: List[str] = [
-            item.lower() for item in self.modconfig["values"].split(",")
+        super().__init__(name, modconfig)
+        keys: List[str] = [
+            item.lower() for item in self.modconfig.attributes.split(",")
         ]
+        values: List[str] = [item.lower() for item in self.modconfig.values.split(",")]
         if len(keys) != len(values):
-            raise exceptions.ConfigurationError(
-                "pkt_ldap_attributes: keys/values length mismatch"
-            )
+            raise ConfigurationError("pkt_ldap_attributes: keys/values length mismatch")
         del self.modconfig["values"]
         self.modconfig["attrs"] = dict(zip(keys, values))
         print(self.modconfig["attrs"])
@@ -52,7 +49,7 @@ class pyt_ldap_attributes(pyt_ldap.LdapSource):
 
 
 if __name__ == "__main__":
-    d = pyt_ldap_attributes(
+    d = LDAPAttributes(
         {
             "host": "192.168.100.60",
             "port": "389",

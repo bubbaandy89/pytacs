@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from pytacs.config import read_config_file
-from pytacs.structures.models.configuration import Configuration
+from pytacs.structures.models.configurations.configuration import Configuration
 
 TEST_GOOD_CONFIG_FILE_CONTENTS_DICT = {
     "options": {"foreground": True, "syslog": True, "log_level": "DEBUG"},
@@ -24,12 +24,20 @@ TEST_GOOD_CONFIG_FILE_CONTENTS_DICT = {
         }
     ],
     "ldap": {
+        "plugin_name": "ldap_server_fleet",
         "host_name": "",
         "host_ip": "192.168.100.60",
         "port": 389,
         "dn_format": "cn=%s,ou=people,dc=haqa,dc=net",
         "attributes": ["objectClass", "sn", "mail"],
         "values": ["inetOrgPerson", "", ""],
+    },
+    "mysql": {
+        "plugin_name": "mysql_aa_db",
+        "host_name": "",
+        "host_ip": "192.168.100.60",
+        "port": 3306,
+        "table_name": "test_table",
     },
 }
 

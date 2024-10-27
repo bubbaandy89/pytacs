@@ -13,7 +13,7 @@ from structlog.stdlib import BoundLogger
 
 from pytacs.config import read_config_file
 from pytacs.plugins import load_plugins
-from pytacs.structures.models.configuration import Configuration
+from pytacs.structures.models.configurations.configuration import Configuration
 from pytacs.util import configure_structlog, get_log_level_from_string
 
 

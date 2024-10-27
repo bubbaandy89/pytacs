@@ -14,10 +14,11 @@ Must have the following options defined
 
 from typing import List
 
-from pytacs import user_source
+from pytacs.plugins.base.user_source import UserSource
+from pytacs.structures.models.configurations.plugins.mysql import MySQLConfiguration
 
 
-class pyt_mysql(user_source.UserSource):
+class PYTacsMySQL(UserSource):
     "A user source based on a MySQL table"
 
     __required__: List[str] = [
@@ -30,10 +31,10 @@ class pyt_mysql(user_source.UserSource):
         "pass_column",
     ]
 
-    def __init__(self, name, modconfig):
+    def __init__(self, name: str, modconfig: MySQLConfiguration) -> None:
         "Prepare MySQL settings"
-        user_source.UserSource.__init__(self, name, modconfig)
+        super().__init__(name, modconfig)
 
-    def checkUser(self, user, password):
+    def check_user(self, user, password):
         "Verify a user against the MySQL table"
         return False

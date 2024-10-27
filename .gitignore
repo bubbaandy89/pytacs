@@ -1,3 +1,4 @@
 *__pycache__*
 venv/*
 src/pytacs_plus.egg-info/*
+.coverage.*

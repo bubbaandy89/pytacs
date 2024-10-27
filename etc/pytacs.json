@@ -23,6 +23,8 @@
         }
     ],
     "ldap": {
+        "plugin_name": "ldap_server_fleet",
+        "enabled": true,
         "host_name": "",
         "host_ip": "192.168.100.60",
         "port": 389,
@@ -37,5 +39,13 @@
             "",
             ""
         ]
+    },
+    "mysql": {
+        "plugin_name": "mysql_aa_db",
+        "enabled": false,
+        "host_name": "",
+        "host_ip": "192.168.100.60",
+        "port": 3306,
+        "table_name": "test_table"
     }
 }
