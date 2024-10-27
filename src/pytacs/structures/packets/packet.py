@@ -1,12 +1,10 @@
 import logging
 import struct
 from hashlib import md5
-from typing import Any, Generator, Literal, Union
+from typing import Any, Dict, Generator, Literal, Optional
 
 import pytacs.structures.exceptions as exceptions
-
-# import six
-
+from pytacs.structures.exceptions import PyTACSError
 
 TAC_PLUS_MAJOR_VER: Literal[12] = 0x0C
 
@@ -73,7 +71,7 @@ class Packet:
     +----------------+----------------+----------------+----------------+
     """
 
-    _secret: str = ""  # The secret for this connection
+    _secret: bytes = b""  # The secret for this connection
     _packet: bytes = b""
     _major: int = TAC_PLUS_MAJOR_VER
     _minor: int = TAC_PLUS_MINOR_VER_DEFAULT
@@ -82,25 +80,20 @@ class Packet:
     _flags: int = 0
     _session_id: int = 0
     _length: int = 0
-    _body: str = ""
+    _body: bytes = b""
     _packstr: bytes = b"!BBBBII"
 
-    def __init__(self, session: int, secret: str) -> None:
+    def __init__(self, session_id: Optional[int], secret: Optional[bytes]) -> None:
         "Constructor"
-        self._session_id = session
-        self._secret = secret
+        self._session_id = session_id or 0
+        self._secret = secret or b""
 
     def __pseudo_pad(self) -> Generator[int, Any, None]:
         "Generate the pseudo random pad for encryption/decryption"
-        logging.info(f"_packet = {self._packet}")
-        # decoded_packet = self._packet.decode()
-        # logging.info(f"decoded_packet = {decoded_packet}")
-        logging.info(f"secret = {self._secret}")
+        logging.debug(f"_packet = {self._packet.decode()}")
+        logging.debug(f"secret = {self._secret.decode()}")
         key: bytes = (
-            self._packet[4:8]
-            + self._secret.encode()
-            + self._packet[:1]
-            + self._packet[2:3]
+            self._packet[4:8] + self._secret + self._packet[:1] + self._packet[2:3]
         )
         while 1:
             hash: bytes = md5(key).digest()
@@ -112,10 +105,7 @@ class Packet:
             return data
         data_length: int = len(data)
         unhashed: bytes = (
-            self._packet[4:8]
-            + self._secret.encode()
-            + self._packet[:1]
-            + self._packet[2:3]
+            self._packet[4:8] + self._secret + self._packet[:1] + self._packet[2:3]
         )
         pad = hashed = md5(unhashed).digest()
 
@@ -128,11 +118,11 @@ class Packet:
                     break
 
         pad = pad[0:(data_length)]
-        pad = list(struct.unpack("B" * len(pad), pad))
+        pad_list = list(struct.unpack("B" * len(pad), pad))
 
         packet_body = []
         for x in struct.unpack("B" * data_length, data):
-            packet_body.append(x ^ pad.pop(0))
+            packet_body.append(x ^ pad_list.pop(0))
 
         return struct.pack("B" * len(packet_body), *packet_body)
 
@@ -146,23 +136,26 @@ class Packet:
 
     def __str__(self) -> str:
         "Turn the packet into a usable string"
-        retval: str = "Packet:\t%s\n" % (self.__class__.__name__.split(".")[-1],)
-        retval += "Ver:\t%s/%s\n" % (self._major, self._minor)
-        retval += "Type:\t%s\n" % (self._type,)
-        retval += "Seq:\t%s\n" % (self._seq_no,)
-        retval += "Flags:\t%s\n" % (self._flags,)
-        retval += "Ses'n:\t%s\n" % (self._session_id,)
-        retval += "Length:\t%s\n" % (self._length,)
-        retval += "---------- BODY START\n"
-        retval += self._body + "\n"
-        retval += "---------- BODY END\n"
-        return retval
+        return (
+            f"Packet:\t{self.__class__.__name__.split('.')[-1]}\n"
+            f"Ver:\t{self._major}/{self._minor}\n"
+            f"Type:\t{self._type}\n"
+            f"Seq:\t{self._seq_no}\n"
+            f"Flags:\t{self._flags}\n"
+            f"Ses'n:\t{self._session_id}\n"
+            f"Length:\t{self._length}\n"
+            f"---------- BODY START\n"
+            f"{self._body.decode()}\n"
+            f"---------- BODY END\n"
+        )
 
-    def decode(packet_data, secret) -> Union[Authentication, Authorization, Accounting]:
+    @staticmethod
+    def decode(packet_data: bytes, secret: bytes) -> "Packet":
         "Decode a packet off the wire and return an object"
         for packet_item in packet_data:
             logging.info(f"Packet data {packet_item}")
         tactype: int = packet_data[1]
+        obj: Packet
         if tactype == TAC_PLUS_AUTHEN:
             obj = Authentication()
         elif tactype == TAC_PLUS_AUTHOR:
@@ -170,13 +163,11 @@ class Packet:
         elif tactype == TAC_PLUS_ACCT:
             obj = Accounting()
         else:
-            raise exceptions.PyTACSError("Invalid packet type received")
+            raise PyTACSError("Invalid packet type received")
         obj._secret = secret
         obj._packet = packet_data
         obj._decode()
         return obj
-
-    decode = staticmethod(decode)
 
     def _decode(self):
         """Decode the packet header. This also decrypts the body,
@@ -210,43 +201,43 @@ class Packet:
         self._packet = self._packet + self.__crypt(self._body)
         return self._packet
 
-    def reply(self):
+    def reply(self) -> "Packet":
         """Construct a reply packet by duplicating the header fields
         and then incrementing the sequence number field.
         This is done by encoding the existing packet, tuncating to 8
         bytes, appending a length of zero (four zero bytes) then
         decoding it."""
-        newpacket = Packet.decode(
-            self.encode()[:8] + "\0\0\0\0".encode(), self._secret.encode()
+        newpacket: Packet = Packet.decode(
+            self.encode()[:8] + "\0\0\0\0".encode(), self._secret
         )
         newpacket._seq_no += 1
         return newpacket
 
-    def get_type(self):
+    def get_type(self) -> int:
         "Return the numeric type of this packet"
         return self._type
 
-    def get_session_id(self):
+    def get_session_id(self) -> int:
         "Return the session ID of this packet"
         return self._session_id
 
-    def set_seq_number(self, seq_no):
+    def set_seq_number(self, seq_no: int) -> None:
         "Set the sequence number"
         self._seq_no = seq_no
 
-    def get_seq_number(self):
+    def get_seq_number(self) -> int:
         "Get the sequence number"
         return self._seq_no
 
-    def set_flag(self, flag):
+    def set_flag(self, flag: int) -> None:
         "Set the bit(s) for the passed flag(s)"
         self._flags |= flag
 
-    def reset_flag(self, flag):
+    def reset_flag(self, flag: int) -> None:
         "Reset the bit(s) for the passed flag(s)"
         self._flags &= ~flag & 255
 
-    def get_flag(self, flag):
+    def get_flag(self, flag: int) -> bool:
         "Is the passed flag set?"
         return (self._flags & flag) == flag
 
@@ -300,20 +291,22 @@ class Authentication(Packet):
        |    data ...
        +----------------+"""
 
-    _startstr: str = b"!BBBBBBBB"
-    _replystr: str = b"!BBHH"
-    _continuestr: str = b"!HH"
+    _startstr: bytes = b"!BBBBBBBB"
+    _replystr: bytes = b"!BBHH"
+    _continuestr: bytes = b"!HH"
 
-    def __init__(self, secret=None):
+    def __init__(
+        self, session_id: Optional[int] = None, secret: Optional[bytes] = None
+    ) -> None:
         "Initialise this authentication packet"
-        Packet.__init__(self, secret)
+        super().__init__(session_id=session_id, secret=secret)
         self._type = TAC_PLUS_AUTHEN
         self._subtype: int = TAC_PLUS_AUTHEN_START
-        self._fields = {}
+        self._fields: Dict[str, Any] = {}
 
-    def _decode(self):
+    def _decode(self) -> None:
         "Decode the packet header and the authentication body"
-        Packet._decode(self)
+        super()._decode()
         if self._seq_no == 1:
             self._subtype = TAC_PLUS_AUTHEN_START
         elif (int(self._seq_no / 2) * 2) != self._seq_no:
@@ -367,11 +360,11 @@ class Authentication(Packet):
             raise exceptions.PyTACSError("Invalid packet sub-type")
         return Packet.encode(self)
 
-    def set_field(self, field, value):
+    def set_field(self, field: str, value: Any) -> None:
         "Set a field value"
         self._fields[field] = value
 
-    def get_field(self, field, default=None):
+    def get_field(self, field: str, default: Optional[Any] = None) -> Any:
         "Get a field"
         return self._fields.get(field, default)
 
@@ -764,11 +757,13 @@ class Authorization(Packet):
 
        None of the arg values have any relevance if an ERROR is set."""
 
-    def __init__(self, secret=None):
+    def __init__(
+        self, session_id: Optional[int] = None, secret: Optional[bytes] = None
+    ) -> None:
         "Initialise this authz packet"
-        Packet.__init__(self, secret)
+        super().__init__(session_id, secret)
         self._type = TAC_PLUS_AUTHOR
-        self._fields = {}
+        self._fields: Dict[str, Any] = {}
 
 
 # }}}
@@ -970,11 +965,13 @@ class Accounting(Packet):
        task is still running. The STOP flag MUST NOT be set in conjunction
        with the WATCHDOG flag."""
 
-    def __init__(self, secret=None):
+    def __init__(
+        self, session_id: Optional[int] = None, secret: Optional[bytes] = None
+    ) -> None:
         "Initialise this acct packet"
-        Packet.__init__(self, secret)
+        super().__init__(session_id, secret)
         self._type = TAC_PLUS_ACCT
-        self._fields = {}
+        self._fields: Dict[str, Any] = {}
 
 
 # {{{ Further details from the RFC
@@ -1061,11 +1058,11 @@ class Accounting(Packet):
 # }}}
 
 if __name__ == "__main__":
-    obj = Authentication(secret="fred")
-    obj._body = "Wibble=Wobble"
+    obj = Authentication(secret="fred".encode())
+    obj._body = "Wibble=Wobble".encode()
     obj._seq_no = 3
     obj._session_id = 32769
     packet = obj.encode()
     print(repr(obj))
-    newobj = Packet.decode(packet, "fred")
+    newobj = Packet.decode(packet, "fred".encode())
     print(repr(newobj))
