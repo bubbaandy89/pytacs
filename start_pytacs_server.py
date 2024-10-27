@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import getopt
+
 import logging
 import logging.handlers
 import os
@@ -13,7 +13,6 @@ from structlog.stdlib import BoundLogger
 
 from pytacs.config import read_config_file
 from pytacs.plugins import load_plugins
-from pytacs.structures.exceptions import ConfigurationError
 from pytacs.structures.models.configuration import Configuration
 from pytacs.util import configure_structlog, get_log_level_from_string
 
@@ -56,7 +55,7 @@ def start_server(
     pidfile: Path = DEFAULT_CONFIG["pidfile"],
     kill: bool = DEFAULT_CONFIG["kill"],
     fork: bool = DEFAULT_CONFIG["fork"],
-):
+) -> None:
     config: Configuration = read_config_file(config_file_location)
     log_level: int = get_log_level_from_string(str(config.options.log_level))
     logging.basicConfig(
