@@ -50,6 +50,12 @@ jobs:
       run: |
         pytest --cov
 
+    - name: "Upload coverage data"
+      uses: actions/upload-artifact@v3
+      with:
+        name: covdata
+        path: .coverage.*
+
   coverage:
     name: Coverage
     needs: build
