@@ -14,7 +14,7 @@ URL: http://pytacs.sourceforge.net
 Group: Servers
 Source0: %{product}-%{version}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
-BuildRequires: python >= 2.3.4 python-ldap >= 2.0
+BuildRequires: python >= 3.9.0 
 
 %description
 PyTACS is a tacacs+ compatible server and client/server library written in python.
@@ -31,7 +31,7 @@ PyTACS Lib is a tacacs+ compatible library written in Python.
 Summary: PyTACS Python Tacacs+ Server
 Group: Servers
 Requires: %{product}-lib = %{version}
-Requires: python >= 2.3.4 python-ldap >= 2.0
+Requires: python >= 3.9.0
 
 %description server
 PyTACS Server is a tacacs+ compatible server written in Python. User authentication and authorisation sources are easily configured and new sources can easily be created and added.
