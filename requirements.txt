@@ -1,19 +1,28 @@
+# Build System Compoents
+types-setuptools
+tox
+tox-gh-actions
+
 # AAA Backends
 ldap3
 types-ldap3
 mysql-connector-python
 
-six
 typer
-types-setuptools
 ipython
+
+# Data Modeling
 pydantic
+
 # Unit Testing
 pytest
 pytest-cov
+coverage
+
 # Formatting/linting
 flake8
 black
 mypy
+
 # Logging
 structlog
