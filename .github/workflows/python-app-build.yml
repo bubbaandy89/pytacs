@@ -80,7 +80,7 @@ jobs:
 
       - name: "Combine"
         run: |
-          python -m pytest --cov
+          tox -p auto
           export TOTAL=$(python -c "import json;print(json.load(open('coverage.json'))['totals']['percent_covered_display'])")
           echo "total=$TOTAL" >> $GITHUB_ENV
           echo "### Total coverage: ${TOTAL}%" >> $GITHUB_STEP_SUMMARY
