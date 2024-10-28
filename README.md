@@ -8,8 +8,3 @@ This is a fork of pytacs originally found [here](https://github.com/kjmancuso/py
 
 
 [Github-flavored Markdown](https://guides.github.com/features/mastering-markdown/)
-
-## Testing
-
-### Unit Test Coverage
-
