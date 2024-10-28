@@ -30,5 +30,5 @@ setup(
     package_data={
         "pytacs": ["py.typed"],
     },
-    install_requires=["python-ldap>=3.0.0", "six"],
+    install_requires=[],
 )
