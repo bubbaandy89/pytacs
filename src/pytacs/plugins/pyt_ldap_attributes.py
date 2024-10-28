@@ -8,6 +8,7 @@ Must have the following options defined
     dnfmt	An LDAP DN with the token %s where the username should be inserted
 """
 
+from ipaddress import IPv4Address
 from typing import List
 
 from pytacs.plugins.pyt_ldap import LdapSource
@@ -36,7 +37,7 @@ class LDAPAttributes(LdapSource):
     def check_user(self, user, password) -> bool:
         "Verify a user against the table"
         bind_dn = self.modconfig["dnfmt"] % user
-        userobj = self.getUser(bind_dn, password)
+        userobj = self.get_user(bind_dn, password)
         if not userobj:
             return False
         for key, value in self.modconfig["attrs"].items():
@@ -50,12 +51,14 @@ class LDAPAttributes(LdapSource):
 
 if __name__ == "__main__":
     d = LDAPAttributes(
-        {
-            "host": "192.168.100.60",
-            "port": "389",
-            "dnfmt": "cn=%s,ou=people,dc=haqa,dc=net",
-            "attrs": "objectClass,sn,mail",
-            "values": "inetOrgPerson,,",
-        }
+        "ldap_attributes_test",
+        LDAPConfiguration(
+            plugin_name="ldap_attributes_test",
+            host_ip=IPv4Address("192.168.100.60"),
+            port=389,
+            dn_format="cn=%s,ou=people,dc=haqa,dc=net",
+            attributes=["objectClass", "sn", "mail"],
+            values=["inetOrgPerson", "", ""],
+        ),
     )
     print(d.check_user("fred", "password1"))
