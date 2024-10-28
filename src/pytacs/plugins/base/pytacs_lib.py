@@ -18,7 +18,7 @@ class PyTACSModule:
         "Prepare whatever is needed"
         self.modconfig = modconfig
         for key in self.__required__:
-            if key not in self.modconfig.plugin_name:
+            if key not in self.modconfig.model_dump():
                 raise exceptions.ConfigurationError(
                     f"Required option '{key}' "
                     f"missing [{name}:{self.__class__.__name__.split('.')[-1]}]"
