@@ -11,7 +11,7 @@ TEST_GOOD_CONFIG_FILE_CONTENTS_DICT = {
     "modules": ["pyt_tacacs_server", "pyt_ldap_attributes"],
     "servers": [
         {
-            "name": "tac1",
+            "plugin_name": "tacacs_plus",
             "listening_address": "127.0.0.1",
             "listening_port": 49,
             "clients": [
@@ -21,6 +21,7 @@ TEST_GOOD_CONFIG_FILE_CONTENTS_DICT = {
                     "secret": "secret",
                 }
             ],
+            "accounting_logfile": "/var/log/tacacs/accounting.log",
         }
     ],
     "ldap": {
