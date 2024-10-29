@@ -129,13 +129,15 @@ class TACACSPlusHandler(StreamRequestHandler):
         reply: Packet = packet.reply()
         return reply
 
-    def process_authz(self, packet: Packet):
+    def process_authz(self, packet: Packet) -> Packet:
         "Process an Authorization packet"
-        pass
+        reply: Packet = packet.reply()
+        return reply
 
-    def process_acct(self, packet: Packet):
+    def process_acct(self, packet: Packet) -> Packet:
         "Process an Authorization packet"
-        pass
+        reply: Packet = packet.reply()
+        return reply
 
 
 class TACACSPlusListener(ThreadingTCPServer):
