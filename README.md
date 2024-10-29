@@ -8,3 +8,13 @@ This is a fork of pytacs originally found [here](https://github.com/kjmancuso/py
 
 
 [Github-flavored Markdown](https://guides.github.com/features/mastering-markdown/)
+
+## Development
+
+### Building
+
+* Build package and run coverlay:
+
+```bash
+tox -p auto
+```
