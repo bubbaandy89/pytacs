@@ -49,7 +49,7 @@ jobs:
         run: sudo aa-disable /usr/sbin/slapd
         
       - name: Run Pysa
-        uses: facebook/pysa-action
+        uses: facebook/pysa-action@15c7aea01cff64049bafe04fac871bd2cb50df56
         with:
           # To customize these inputs:
           # See https://github.com/facebook/pysa-action#inputs
