@@ -9,9 +9,13 @@ import threading
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from socketserver import StreamRequestHandler, ThreadingTCPServer
 from threading import Thread
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, Callable, List, Optional, Tuple, Union
 
+from structlog.stdlib import BoundLogger
+
+from pytacs.plugins.base.packet_handler import BasePacketHandler, BasePacketHandlerException
 from pytacs.plugins.base.pytacs_lib import PyTACSModule
+from pytacs.structures.models.client import ClientConfiguration
 from pytacs.structures.models.server import ServerConfiguration
 from pytacs.structures.packets.packet import (
     TAC_PLUS_ACCT,
@@ -22,67 +26,87 @@ from pytacs.structures.packets.packet import (
 )
 
 
-class MultiThreadedTCPListener:
-    """
-    Potential alternative for listener, needs some work.
-    """
+class InvalidPacketTypeException(BasePacketHandlerException):
+    pass
 
-    def __init__(
-        self,
-        listen_ip: Union[IPv4Address, IPv6Address],
-        listen_port: int,
-        packet_handler: Callable[[bytes], Any],
-    ) -> None:
-        self.listen_host: Union[IPv4Address, IPv6Address] = listen_ip
-        self.listen_port: int = listen_port
-        self.packet_handler = packet_handler
-        self.socket: Optional[socket.socket] = None
-        self.running: bool = False
 
-    def start_server(self) -> None:
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.socket.bind((self.listen_host, self.listen_port))
-        self.socket.listen(5)
-        self.running = True
+class PacketTypeMismatchException(InvalidPacketTypeException):
+    pass
 
-        logging.info(f"Server started on {self.listen_host}:{self.listen_port}")
 
-        while self.running:
-            try:
-                client_socket, nas_address = self.socket.accept()
-                logging.info(f"New connection from {nas_address}")
-                client_thread = threading.Thread(
-                    target=self.handle_client, args=(client_socket, nas_address)
-                )
-                client_thread.start()
-            except Exception as e:
-                logging.error(f"Error accepting connection: {e}")
+class TACACSPlusPacketHandler(BasePacketHandler):
+    def __init__(self, logger: BoundLogger, mod_config: ServerConfiguration) -> None:
+        super().__init__(logger, mod_config)
+        self.session: Optional[Any] = None
 
-    def stop(self):
-        self.running = False
-        if self.socket:
-            self.socket.close()
-        logging.info("Server stopped")
+    def _find_client_by_ip(
+        self, target_ip: Union[IPv4Address, IPv6Address]
+    ) -> Optional[ClientConfiguration]:
+        """
+        Find a client dictionary by IP address from a list of client dictionaries.
 
-    def handle_client(self, client_socket: socket.socket, address: tuple):
-        try:
-            while self.running:
-                data = client_socket.recv(4096)
-                if not data:
-                    break
+        Args:
+            target_ip: IP address to search for
 
-                # Parse the packet using the provided handler
-                result = self.packet_handler(data)
+        Returns:
+            Matching dictionary or None if not found
+        """
+        return next(
+            (client for client in self.mod_config.clients if client["ip_address"] == target_ip),
+            None,
+        )
 
-                # Here you can do something with the result if needed
-                logging.info(f"Processed packet from {address}: {result}")
+    def _get_packet_type(self, decrypted_packet: Packet) -> Optional[Packet]:
+        reply: Optional[Packet] = None
+        if decrypted_packet.get_type() == TAC_PLUS_AUTHEN:
+            reply = self.process_authn(decrypted_packet)
+        elif decrypted_packet.get_type() == TAC_PLUS_AUTHOR:
+            reply = self.process_authz(decrypted_packet)
+        elif decrypted_packet.get_type() == TAC_PLUS_ACCT:
+            reply = self.process_acct(decrypted_packet)
+        else:
+            self.logger.error(f"Bad packet type: {decrypted_packet._type}")
 
-        except Exception as e:
-            logging.error(f"Error handling client {address}: {e}")
-        finally:
-            client_socket.close()
-            logging.info(f"Connection closed for {address}")
+        return reply
+
+    def handle_packet(self, packet_data: bytes, client_address: Tuple) -> Optional[bytes]:
+        client_ip: Union[IPv4Address, IPv6Address] = ip_address(client_address[0])
+        self.logger.debug(f"Received packet from {client_ip}")
+        if client := self._find_client_by_ip(client_ip):
+            self.logger.debug(f"Found client in config: {client}")
+            secret: bytes = client.secret.get_secret_value().encode()
+            decrypted_packet: Packet = Packet.decode(packet_data, secret)
+            if decrypted_packet.get_seq_number() == 1:
+                self.session = {}
+                self.start: Packet = decrypted_packet
+            else:
+                if decrypted_packet.get_type() != self.start.get_type():
+                    self.logger.error("Packet type mismatch")
+                    raise PacketTypeMismatchException("Packet type mismatch")
+
+            reply: Optional[Packet] = self._get_packet_type(decrypted_packet)
+            if not reply:
+                raise InvalidPacketTypeException("Invalid packet type")
+            else:
+                if reply.get_seq_number() < 3:
+                    reply.set_flag(TAC_PLUS_SINGLE_CONNECT_FLAG)
+                return reply.encode()
+        return None
+
+    def process_authn(self, packet: Packet) -> Packet:
+        "Process an Authentication packet"
+        reply: Packet = packet.reply()
+        return reply
+
+    def process_authz(self, packet: Packet) -> Packet:
+        "Process an Authorization packet"
+        reply: Packet = packet.reply()
+        return reply
+
+    def process_acct(self, packet: Packet) -> Packet:
+        "Process an Authorization packet"
+        reply: Packet = packet.reply()
+        return reply
 
 
 class TACACSPlusHandler(StreamRequestHandler):
@@ -155,16 +179,18 @@ class PYTacsTACACSServer(PyTACSModule, Thread):
     __required__: List[str] = ["listening_address", "listening_port", "clients"]
     __registry__: str = "servers"
 
-    def __init__(self, name, modconfig: ServerConfiguration) -> None:
+    def __init__(self, name: str, modconfig: ServerConfiguration, logger: BoundLogger) -> None:
+        self.logger: BoundLogger = logger
+
         "Start the tacacs server and record it in the server list"
         self.running: bool = True
         super().__init__(
             name,
             modconfig,
         )
-        threading.Thread.__init__(
+        Thread.__init__(
             self,
-            name="PyTACS TACACS+ Listener (%s)" % (name,),
+            name=f"PyTACS TACACS+ Listener ({name})",
         )
         self.listener: TACACSPlusListener = TACACSPlusListener(
             (self.modconfig.listening_address, self.modconfig.listening_port),
@@ -173,11 +199,12 @@ class PYTacsTACACSServer(PyTACSModule, Thread):
 
     def stop(self) -> None:
         "Set the flag to stop the thread"
+        self.logger.info(f"Stopping {self.getName()}")
         self.running = False
 
     def run(self) -> None:
         "Start listening"
-        logging.info(f"Starting {self.getName()}")
+        self.logger.info(f"Starting {self.getName()}")
         while self.running:
             self.listener.handle_request()
 
@@ -185,4 +212,5 @@ class PYTacsTACACSServer(PyTACSModule, Thread):
         "Register this module and grab the secrets"
         super().__reg_module__(globals, name)
         clients = self.modconfig.clients
+        self.logger.debug(f"Clients: {clients}")
         self.listener.clients = clients
