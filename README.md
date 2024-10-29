@@ -18,3 +18,14 @@ This is a fork of pytacs originally found [here](https://github.com/kjmancuso/py
 ```bash
 tox -p auto
 ```
+
+* Attempt to start server:
+
+```python
+from pytacs.plugins.base.pyt_tacacs_server import PYTacsTACACSServer
+from pytacs.structures.models.client import ClientConfiguration
+from pytacs.structures.models.server import ServerConfiguration
+client1 = ClientConfiguration(name="test", ip_address="127.0.0.1", secret="secret")
+server_config = ServerConfiguration(plugin_name="test_server", listening_address="127.0.0.1", listening_port=49, clients=[client1])
+server = PYTacsTACACSServer("server", server_config)
+```
