@@ -8,7 +8,10 @@ ldap3
 types-ldap3
 mysql-connector-python
 
+# CLI Functionality
 typer
+
+# Useful debugging tools
 ipython
 
 # Data Modeling
@@ -23,6 +26,7 @@ coverage
 flake8
 black
 mypy
+isort
 
 # Logging
 structlog

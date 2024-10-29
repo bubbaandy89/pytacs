@@ -4,12 +4,10 @@ PyTACS TACACS+ listener and handler
 """
 
 import logging
-import socket
-import threading
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from socketserver import StreamRequestHandler, ThreadingTCPServer
 from threading import Thread
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
 from structlog.stdlib import BoundLogger
 

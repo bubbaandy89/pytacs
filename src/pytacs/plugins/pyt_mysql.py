@@ -16,7 +16,7 @@ from functools import cached_property
 from typing import Any, List, Union
 
 import mysql.connector
-from mysql.connector.abstracts import MySQLConnectionAbstract, MySQLCursorAbstract
+from mysql.connector.abstracts import MySQLConnectionAbstract
 from mysql.connector.pooling import PooledMySQLConnection
 
 from pytacs.plugins.base.user_source import UserSource
