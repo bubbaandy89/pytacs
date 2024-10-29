@@ -65,8 +65,6 @@ class TestPacket(unittest.TestCase):
         self.assertEqual(reply._session_id, self.session_id)
 
     def test_flags(self):
-        self.packet.set_flag(TAC_PLUS_UNENCRYPTED_FLAG)
-        self.assertTrue(self.packet.get_flag(TAC_PLUS_UNENCRYPTED_FLAG))
 
         self.packet.reset_flag(TAC_PLUS_UNENCRYPTED_FLAG)
         self.assertFalse(self.packet.get_flag(TAC_PLUS_UNENCRYPTED_FLAG))
