@@ -1,7 +1,8 @@
 import logging
 import struct
+from enum import IntEnum
 from hashlib import md5
-from typing import Any, Dict, Generator, Literal, Optional
+from typing import Any, Dict, Generator, List, Literal, Optional
 
 import pytacs.structures.exceptions as exceptions
 from pytacs.structures.exceptions import PyTACSError
@@ -54,6 +55,41 @@ TAC_PLUS_AUTHEN_STATUS_FAIL: Literal[2] = 0x02
 TAC_PLUS_AUTHEN_STATUS_GETDATA: Literal[3] = 0x03
 
 
+class AuthenMethod(IntEnum):
+    NOT_SET = 0x00
+    NONE = 0x01
+    KRB5 = 0x02
+    LINE = 0x03
+    ENABLE = 0x04
+    LOCAL = 0x05
+    TACACSPLUS = 0x06
+    GUEST = 0x08
+    RADIUS = 0x10
+    KRB4 = 0x11
+    RCMD = 0x20
+
+
+class AuthStatus(IntEnum):
+    PASS_ADD = 0x01  # Authorization permitted with additional attributes
+    PASS = 0x02  # Authorization permitted
+    FAIL = 0x10  # Authorization failed
+    ERROR = 0x11  # Authorization error occurred
+    FOLLOW = 0x21  # Follow instructions in server response
+
+
+class AccountingFlags(IntEnum):
+    MORE = 0x01  # deprecated
+    START = 0x02  # Start record
+    STOP = 0x04  # Stop record
+    WATCHDOG = 0x08  # Update record
+
+
+class AccountingStatus(IntEnum):
+    SUCCESS = 0x01  # Accounting successful
+    ERROR = 0x02  # Accounting error
+    FOLLOW = 0x21  # Follow instructions in response
+
+
 class Packet:
     """The TACACS+ packet header
 
@@ -92,9 +128,7 @@ class Packet:
         "Generate the pseudo random pad for encryption/decryption"
         logging.debug(f"_packet = {self._packet.decode()}")
         logging.debug(f"secret = {self._secret.decode()}")
-        key: bytes = (
-            self._packet[4:8] + self._secret + self._packet[:1] + self._packet[2:3]
-        )
+        key: bytes = self._packet[4:8] + self._secret + self._packet[:1] + self._packet[2:3]
         while 1:
             hash: bytes = md5(key).digest()
             for char in hash:
@@ -104,9 +138,7 @@ class Packet:
         if self._flags & TAC_PLUS_UNENCRYPTED_FLAG or self._secret is None:
             return data
         data_length: int = len(data)
-        unhashed: bytes = (
-            self._packet[4:8] + self._secret + self._packet[:1] + self._packet[2:3]
-        )
+        unhashed: bytes = self._packet[4:8] + self._secret + self._packet[:1] + self._packet[2:3]
         pad = hashed = md5(unhashed).digest()
 
         if len(pad) < data_length:
@@ -207,9 +239,7 @@ class Packet:
         This is done by encoding the existing packet, tuncating to 8
         bytes, appending a length of zero (four zero bytes) then
         decoding it."""
-        newpacket: Packet = Packet.decode(
-            self.encode()[:8] + "\0\0\0\0".encode(), self._secret
-        )
+        newpacket: Packet = Packet.decode(self.encode()[:8] + "\0\0\0\0".encode(), self._secret)
         newpacket._seq_no += 1
         return newpacket
 
@@ -228,10 +258,6 @@ class Packet:
     def get_seq_number(self) -> int:
         "Get the sequence number"
         return self._seq_no
-
-    def set_flag(self, flag: int) -> None:
-        "Set the bit(s) for the passed flag(s)"
-        self._flags |= flag
 
     def reset_flag(self, flag: int) -> None:
         "Reset the bit(s) for the passed flag(s)"
@@ -295,9 +321,7 @@ class Authentication(Packet):
     _replystr: bytes = b"!BBHH"
     _continuestr: bytes = b"!HH"
 
-    def __init__(
-        self, session_id: Optional[int] = None, secret: Optional[bytes] = None
-    ) -> None:
+    def __init__(self, session_id: Optional[int] = None, secret: Optional[bytes] = None) -> None:
         "Initialise this authentication packet"
         super().__init__(session_id=session_id, secret=secret)
         self._type = TAC_PLUS_AUTHEN
@@ -757,13 +781,169 @@ class Authorization(Packet):
 
        None of the arg values have any relevance if an ERROR is set."""
 
-    def __init__(
-        self, session_id: Optional[int] = None, secret: Optional[bytes] = None
-    ) -> None:
+    def __init__(self, session_id: Optional[int] = None, secret: Optional[bytes] = None) -> None:
         "Initialise this authz packet"
         super().__init__(session_id, secret)
         self._type = TAC_PLUS_AUTHOR
         self._fields: Dict[str, Any] = {}
+        self.authen_method: AuthenMethod = AuthenMethod.NOT_SET
+        self.priv_lvl: int = 0
+        self.authen_type: int = 0
+        self.authen_service: int = 0
+        self.user: str = ""
+        self.port: str = ""
+        self.rem_addr: str = ""
+        self.status: AuthStatus = AuthStatus.FAIL  # Default to FAIL
+        self.args: List[tuple[str, str, bool]] = []  # List of (attr, value, mandatory) tuples
+
+    def set_status(self, status: AuthStatus) -> None:
+        """Set the authorization status.
+
+        Args:
+            status: Authorization status to set
+
+        Raises:
+            ValueError: If status is not a valid AuthStatus value
+        """
+        if not isinstance(status, AuthStatus):
+            raise ValueError("Status must be a valid AuthStatus enum value")
+        self.status = status
+
+    def pack(self) -> bytes:
+        """Pack the authorization request into bytes format.
+
+        Returns:
+            bytes: The packed authorization request
+        """
+        # Calculate lengths
+        user_len: int = len(self.user)
+        port_len: int = len(self.port)
+        rem_addr_len: int = len(self.rem_addr)
+        arg_cnt: int = len(self.args)
+
+        # Create the header portion
+        header = bytearray(
+            [
+                self.authen_method,
+                self.priv_lvl,
+                self.authen_type,
+                self.authen_service,
+                user_len,
+                port_len,
+                rem_addr_len,
+                arg_cnt,
+            ]
+        )
+
+        # Add argument lengths
+        for attr, value, _ in self.args:
+            arg_str: str = f"{attr}={'=' if _ else '*'}{value}"
+            header.append(len(arg_str))
+
+        # Add the variable length fields
+        body = bytearray()
+        body.extend(self.user.encode())
+        body.extend(self.port.encode())
+        body.extend(self.rem_addr.encode())
+
+        # Add the arguments
+        for attr, value, mandatory in self.args:
+            separator = "=" if mandatory else "*"
+            arg_str = f"{attr}{separator}{value}"
+            body.extend(arg_str.encode())
+
+        return bytes(header + body)
+
+    @classmethod
+    def unpack(cls, data: bytes) -> "Authorization":
+        """Unpack bytes into an Authorization object.
+
+        Args:
+            data: Raw bytes to unpack
+
+        Returns:
+            Authorization: New Authorization instance
+        """
+        auth = cls()
+
+        # Unpack the fixed header
+        auth.authen_method = AuthenMethod(data[0])
+        auth.priv_lvl = data[1]
+        auth.authen_type = data[2]
+        auth.authen_service = data[3]
+
+        user_len: int = data[4]
+        port_len: int = data[5]
+        rem_addr_len: int = data[6]
+        arg_cnt: int = data[7]
+
+        # Get argument lengths
+        arg_lengths = []
+        offset = 8
+        for _ in range(arg_cnt):
+            arg_lengths.append(data[offset])
+            offset += 1
+
+        # Extract user, port, and rem_addr
+        auth.user = data[offset : offset + user_len].decode()
+        offset += user_len
+
+        auth.port = data[offset : offset + port_len].decode()
+        offset += port_len
+
+        auth.rem_addr = data[offset : offset + rem_addr_len].decode()
+        offset += rem_addr_len
+
+        # Extract arguments
+        for arg_len in arg_lengths:
+            arg_data: str = data[offset : offset + arg_len].decode()
+            if "=" in arg_data:
+                attr, value = arg_data.split("=", 1)
+                auth.args.append((attr, value, True))
+            elif "*" in arg_data:
+                attr, value = arg_data.split("*", 1)
+                auth.args.append((attr, value, False))
+            offset += arg_len
+
+        return auth
+
+    def add_arg(self, attr: str, value: str, mandatory: bool = True) -> None:
+        """Add an authorization argument.
+
+        Args:
+            attr: Attribute name
+            value: Attribute value
+            mandatory: Whether the argument is mandatory (True) or optional (False)
+        """
+        if len(f"{attr}={'=' if mandatory else '*'}{value}") > 255:
+            raise ValueError("Argument length cannot exceed 255 characters")
+        self.args.append((attr, value, mandatory))
+
+    def validate(self) -> bool:
+        """Validate the authorization packet.
+
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        # Check mandatory service attribute
+        service_arg = next((arg for arg in self.args if arg[0] == "service"), None)
+        if not service_arg:
+            return False
+
+        # Validate cmd attribute for shell service
+        if service_arg[1] == "shell":
+            cmd_arg = next((arg for arg in self.args if arg[0] == "cmd"), None)
+            if not cmd_arg:
+                return False
+
+        # Validate remote_user and remote_host for RCMD authentication
+        if self.authen_method == AuthenMethod.RCMD:
+            remote_user = next((arg for arg in self.args if arg[0] == "remote_user"), None)
+            remote_host = next((arg for arg in self.args if arg[0] == "remote_host"), None)
+            if not (remote_user and remote_host):
+                return False
+
+        return True
 
 
 # }}}
@@ -965,13 +1145,216 @@ class Accounting(Packet):
        task is still running. The STOP flag MUST NOT be set in conjunction
        with the WATCHDOG flag."""
 
-    def __init__(
-        self, session_id: Optional[int] = None, secret: Optional[bytes] = None
-    ) -> None:
+    def __init__(self, session_id: Optional[int] = None, secret: Optional[bytes] = None) -> None:
         "Initialise this acct packet"
         super().__init__(session_id, secret)
         self._type = TAC_PLUS_ACCT
         self._fields: Dict[str, Any] = {}
+
+        # Fixed header fields
+        self.flags: int = 0
+        self.authen_method: int = 0
+        self.priv_lvl: int = 0
+        self.authen_type: int = 0
+        self.authen_service: int = 0
+
+        # Variable length fields
+        self.user: str = ""
+        self.port: str = ""
+        self.rem_addr: str = ""
+        self.args: List[str] = []
+
+        # Server response fields
+        self.status: AccountingStatus = AccountingStatus.ERROR
+        self.server_msg: str = ""
+        self.data: str = ""
+
+    def set_flag(self, flag: AccountingFlags) -> None:
+        """Set an accounting flag.
+
+        Args:
+            flag: Flag to set
+
+        Raises:
+            ValueError: If START and STOP flags are set together or
+                       if STOP and WATCHDOG flags are set together
+        """
+        if flag == AccountingFlags.START and self.flags & AccountingFlags.STOP:
+            raise ValueError("START and STOP flags are mutually exclusive")
+
+        if flag == AccountingFlags.WATCHDOG and self.flags & AccountingFlags.STOP:
+            raise ValueError("WATCHDOG and STOP flags cannot be combined")
+
+        self.flags |= flag
+
+    def pack(self) -> bytes:
+        """Pack the accounting packet into bytes.
+
+        Returns:
+            bytes: The packed accounting packet
+        """
+        # Calculate lengths
+        user_len = len(self.user)
+        port_len = len(self.port)
+        rem_addr_len = len(self.rem_addr)
+        arg_cnt = len(self.args)
+
+        # Create header
+        header = bytearray(
+            [
+                self.flags,
+                self.authen_method,
+                self.priv_lvl,
+                self.authen_type,
+                self.authen_service,
+                user_len,
+                port_len,
+                rem_addr_len,
+                arg_cnt,
+            ]
+        )
+
+        # Add argument lengths
+        for arg in self.args:
+            header.append(len(arg))
+
+        # Create body
+        body = bytearray()
+        body.extend(self.user.encode())
+        body.extend(self.port.encode())
+        body.extend(self.rem_addr.encode())
+
+        # Add arguments
+        for arg in self.args:
+            body.extend(arg.encode())
+
+        return bytes(header + body)
+
+    def pack_response(self) -> bytes:
+        """Pack the accounting response packet.
+
+        Returns:
+            bytes: The packed response packet
+        """
+        server_msg_len = len(self.server_msg)
+        data_len = len(self.data)
+
+        header = bytearray()
+        # Add lengths as 16-bit integers
+        header.extend(server_msg_len.to_bytes(2, byteorder="big"))
+        header.extend(data_len.to_bytes(2, byteorder="big"))
+        header.append(self.status)
+
+        body = bytearray()
+        body.extend(self.server_msg.encode())
+        body.extend(self.data.encode())
+
+        return bytes(header + body)
+
+    @classmethod
+    def unpack(cls, data: bytes) -> "Accounting":
+        """Unpack bytes into an Accounting object.
+
+        Args:
+            data: Raw bytes to unpack
+
+        Returns:
+            Accounting: New Accounting instance
+        """
+        acct = cls()
+
+        # Unpack fixed header
+        acct.flags = data[0]
+        acct.authen_method = data[1]
+        acct.priv_lvl = data[2]
+        acct.authen_type = data[3]
+        acct.authen_service = data[4]
+
+        user_len = data[5]
+        port_len = data[6]
+        rem_addr_len = data[7]
+        arg_cnt = data[8]
+
+        # Get argument lengths
+        offset = 9
+        arg_lengths = []
+        for _ in range(arg_cnt):
+            arg_lengths.append(data[offset])
+            offset += 1
+
+        # Extract variable length fields
+        acct.user = data[offset : offset + user_len].decode()
+        offset += user_len
+
+        acct.port = data[offset : offset + port_len].decode()
+        offset += port_len
+
+        acct.rem_addr = data[offset : offset + rem_addr_len].decode()
+        offset += rem_addr_len
+
+        # Extract arguments
+        for arg_len in arg_lengths:
+            acct.args.append(data[offset : offset + arg_len].decode())
+            offset += arg_len
+
+        return acct
+
+    @classmethod
+    def unpack_response(cls, data: bytes) -> "Accounting":
+        """Unpack response bytes into an Accounting object.
+
+        Args:
+            data: Raw response bytes to unpack
+
+        Returns:
+            Accounting: New Accounting instance with response fields
+        """
+        acct = cls()
+
+        # Get lengths (16-bit integers)
+        server_msg_len = int.from_bytes(data[0:2], byteorder="big")
+        data_len = int.from_bytes(data[2:4], byteorder="big")
+
+        # Get status
+        acct.status = AccountingStatus(data[4])
+
+        # Get variable length fields
+        offset = 5
+        acct.server_msg = data[offset : offset + server_msg_len].decode()
+        offset += server_msg_len
+
+        acct.data = data[offset : offset + data_len].decode()
+
+        return acct
+
+    def add_arg(self, attr: str, value: str) -> None:
+        """Add an accounting argument.
+
+        Args:
+            attr: Attribute name
+            value: Attribute value
+        """
+        self.args.append(f"{attr}={value}")
+
+    def validate(self) -> bool:
+        """Validate the accounting packet.
+
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        # Check for mutually exclusive flags
+        if (self.flags & AccountingFlags.START and self.flags & AccountingFlags.STOP) or (
+            self.flags & AccountingFlags.WATCHDOG and self.flags & AccountingFlags.STOP
+        ):
+            return False
+
+        # Validate task_id presence for START/STOP records
+        if self.flags & (AccountingFlags.START | AccountingFlags.STOP):
+            task_id = next((arg for arg in self.args if arg.startswith("task_id=")), None)
+            if not task_id:
+                return False
+
+        return True
 
 
 # {{{ Further details from the RFC
