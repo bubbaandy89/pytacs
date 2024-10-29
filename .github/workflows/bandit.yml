@@ -12,7 +12,7 @@
 #
 # See https://pyre-check.org/docs/pysa-basics/
 
-name: Pysa
+name: Bandit
 
 on:
   workflow_dispatch:
@@ -48,12 +48,12 @@ jobs:
       - name: Disable AppArmor
         run: sudo aa-disable /usr/sbin/slapd
         
-      - name: Run Pysa
-        uses: facebook/pysa-action@15c7aea01cff64049bafe04fac871bd2cb50df56
+      - name: Bandit Action
+        uses: mdegis/bandit-action@v1.1
         with:
-          # To customize these inputs:
-          # See https://github.com/facebook/pysa-action#inputs
-          repo-directory: './'
-          requirements-path: 'requirements.txt'
-          infer-types: true
-          include-default-sapp-filters: true
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: "."
+          level: high
+          confidence: high
+          exit_zero: true
+    
