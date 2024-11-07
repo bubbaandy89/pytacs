@@ -3,7 +3,7 @@
 import random
 import socket
 
-from pytacs import packet
+from pytacs.structures.packets import packet
 
 server: str = "127.0.0.1"
 port: int = 49
@@ -13,11 +13,11 @@ sock: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.connect((server, port))
 sock.settimeout(2)
 
-authn_packet = packet.Accounting(secret)
+authn_packet = packet.Accounting(secret=secret.encode())
 authn_packet._body = "Wibble=wibble".encode()
 authn_packet._seq_no = 1
 authn_packet._session_id = random.randint(1, 65535)
 sock.send(authn_packet.encode())
 
-response = packet.Packet.decode(sock.recv(4096), secret)
+response = packet.Packet.decode(sock.recv(4096), secret.encode())
 print(response)
