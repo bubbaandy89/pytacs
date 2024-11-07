@@ -30,3 +30,6 @@ isort
 
 # Logging
 structlog
+
+# Client library for testing
+tacacs_plus
