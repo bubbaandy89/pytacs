@@ -2,3 +2,4 @@
 venv/*
 src/pytacs_plus.egg-info/*
 coverage.xml
+.venv/*
